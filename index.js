@@ -4,6 +4,14 @@ const bodyParser = require('body-parser');
 const app = express();
 app.use(bodyParser.json());
 
+const morgan = require('morgan');
+
+morgan.token('body', req => JSON.stringify(req.body));
+const loggerFormat = ':method :url :body :status :response-time';
+
+app.use(morgan(loggerFormat, {
+    stream: process.stdout,
+}));
 
 let persons = [
     {

@@ -1,5 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const morgan = require('morgan');
+const Person = require('./models/person');
 
 const app = express();
 app.use(bodyParser.json());
@@ -11,8 +13,6 @@ app.use((req, res, next) => { // cors package could also be used
     next();
 });
 
-const morgan = require('morgan');
-
 morgan.token('body', req => JSON.stringify(req.body));
 const loggerFormat = ':method :url :body :status :response-time';
 
@@ -22,78 +22,107 @@ app.use(morgan(loggerFormat, {
 
 app.use(express.static('build'));
 
-let persons = [
-    {
-        name: 'Arto Hellas',
-        number: '040-123456',
-        id: 1,
-    },
-    {
-        name: 'Martti Tienari',
-        number: '040-123456',
-        id: 2,
-    },
-    {
-        name: 'Arto Järvinen',
-        number: '040-123456',
-        id: 3,
-    },
-    {
-        name: 'Lea Kutvonen',
-        number: '040-123456',
-        id: 4,
-    },
-];
-
-function generateId() {
-    return Math.floor(Math.random() * Math.floor(100000));
-}
-
 function badRequest(res, errorText) {
     return res.status(400).json({ error: errorText });
-}
-
-function findPerson({ id, name, number }) {
-    return persons.find(person => person.id === Number(id)
-            || person.name === name
-            || person.number === number);
 }
 
 const personsRouter = express.Router();
 
 personsRouter.get('/', (req, res) => {
-    res.json(persons);
+    Person
+        .find({}, { __v: 0 })
+        .then((people) => {
+            res.json(people.map(Person.format));
+        })
+        .catch((err) => {
+            console.log(err);
+            res.status(500).end();
+        });
 });
 
-personsRouter.get('/:id', ({ params: { id } }, res) => {
-    const person = findPerson({ id });
-    if (!person) res.status(404);
-    res.json(person);
-});
+personsRouter.get('/:id', ({ params: { id } }, res) => Person
+    .findById(id)
+    .then((person) => {
+        res.json(Person.format(person));
+    })
+    .catch((err) => {
+        console.log(err);
+        res.status(404).end();
+    }));
 
 personsRouter.post('/', ({ body }, res) => {
-    const person = body;
+    if (!body.name) return badRequest(res, 'name is missing');
+    if (!body.number) return badRequest(res, 'number is missing');
 
-    if (!person.name) return badRequest(res, 'name is missing');
-    if (!person.number) return badRequest(res, 'number is missing');
-    if (findPerson({ name: person.name })) return badRequest(res, 'name must be unique');
+    const person = new Person({
+        name: body.name,
+        number: body.number,
+    });
 
-    person.id = generateId();
-    persons.push(person);
-    return res.json(person);
+    return Person
+        .findOne({ name: body.name }, { __v: 0 })
+        .then((existingPerson) => {
+            if (existingPerson) throw new Error('name must be unique');
+            else return person.save();
+        })
+        .then((savedPerson) => {
+            res.json(Person.format(savedPerson));
+        })
+        .catch((err) => {
+            console.log(err);
+            res.status(500).end();
+        });
+});
+
+personsRouter.put('/:id', ({ body, params }, res) => {
+    if (!body.name) return badRequest(res, 'name is missing');
+    if (!body.number) return badRequest(res, 'number is missing');
+
+    const person = {
+        name: body.name,
+        number: body.number,
+    };
+
+    console.log('params.id', params.id);
+
+    return Person
+        .findByIdAndUpdate(params.id, person, { new: true })
+        .then((updatedPerson) => {
+            res.json(Person.format(updatedPerson));
+        })
+        .catch((err) => {
+            console.log(err);
+            res.status(400).send({ error: 'malformatted id' });
+        });
 });
 
 personsRouter.delete('/:id', ({ params: { id } }, res) => {
-    persons = persons.filter(person => person.id !== Number(id));
-    res.status(204).end();
+    Person
+        .findByIdAndRemove(id)
+        .then(() => {
+            res.status(204).end();
+        })
+        .catch((err) => {
+            console.log(err);
+            res.status(204).end();
+        });
 });
 
 app.use('/api/persons', personsRouter);
 
 app.get('/info', (req, res) => {
-    const date = new Date().toISOString();
-    const infoString = `Puhelinluottelossa on ${persons.length} henkilön tiedot.<br> ${date}`;
-    res.send(infoString);
+    Person
+        .find({}, { __v: 0 })
+        .then((people) => {
+            const date = new Date().toISOString();
+
+            const infoString = `Puhelinluottelossa on ${people.length} henkilön tiedot.<br> ${date}`;
+            res.send(infoString);
+        })
+        .catch((err) => {
+            console.log(err);
+            res.status(500).end();
+        });
 });
 
 const PORT = process.env.PORT || 3001;

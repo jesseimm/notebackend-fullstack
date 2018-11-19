@@ -20,6 +20,8 @@ app.use(morgan(loggerFormat, {
     stream: process.stdout,
 }));
 
+app.use(express.static('build'));
+
 let persons = [
     {
         name: 'Arto Hellas',

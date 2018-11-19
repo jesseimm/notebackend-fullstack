@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
+if (process.env.NODE_END !== 'production') {
+    require('dotenv').config(); //eslint-disable-line
+}
+
 const url = process.env.MONGO_STRING;
+
+console.log('URRLLL', url);
 
 mongoose.connect(url);
 
